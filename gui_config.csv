@@ -1,0 +1,16 @@
+feat,input_size,default,uom,desc,frame
+x0,5,0,m,X Position,Initial State
+y0,5,0,m,Y Position,Initial State
+v0,5,0,mps,Speed,Initial State
+phi0,5,0,degrees,Heading,Initial State
+v_max,5,15,mps,Max Speed,Vehicle Properties
+lf,5,2.5,m,Distance of front axle to center of mass.,Vehicle Properties
+lr,5,2.5,m,Distance of rear axle to center of mass.,Vehicle Properties
+time_window,5,3,s,Simulation Length,Time
+dt,5,0.1,s,Step Size,Time
+a_min,5,-6,mps^2,Min. Acceleration,Control Variables
+a_max,5,4,mps^2,Max. Acceleration,Control Variables
+n_intervals_a,5,3, ,# of samples,Control Variables
+delta_min,5,-10,degrees,Min. Steering Angle,Control Variables
+delta_max,5,10,degrees,Max. Steering Angle,Control Variables
+n_intervals_delta,5,9, ,# of samples,Control Variables

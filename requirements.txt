@@ -1,0 +1,7 @@
+PySimpleGUI==4.60.5
+pandas>=2.2.0
+scipy>=1.12.0
+matplotlib>=3.8.3
+Shapely>=1.8.0
+numpy>=1.26.4
+sim_bug_tools>=1.0.1
