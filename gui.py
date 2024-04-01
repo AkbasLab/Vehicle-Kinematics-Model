@@ -68,7 +68,7 @@ class GUI:
 
         # Ribbon
         ribbon = [
-            sg.Button("Generate"),
+            sg.Button("Generate")
             
         ]
 

@@ -233,6 +233,13 @@ class DriveableAreaEstimator:
         """
         return self.boundary.area
     
+    @property
+    def shape_df(self) -> pd.DataFrame:
+        """
+        Boundary shape as a pandas Dataframe
+        """
+        return self._shape_df
+    
     def predict(self, 
             x : float, 
             y : float, 
@@ -242,7 +249,7 @@ class DriveableAreaEstimator:
             delta : float,
             lf : float,
             lr : float,
-            d : float
+            dt : float
         )-> list[float, float, float, float]:
         """
         @param x : x position (m)
@@ -253,15 +260,15 @@ class DriveableAreaEstimator:
         @param delta : steering angle of front axle (rad) 
         @param lf : Distance from front axle to center of gravity (m) 
         @param lr : Distance from rear axle to center of gravity (m) 
-        @param d : longitudinal distance (m)
+        @param dt : Time elapsed
 
         @return next x, y, phi, and v value.
         """
         beta = np.arctan( (lr/(lf+lr)) * np.tan(delta))
-        next_x = x + v * np.cos(phi + beta) * d
-        next_y = y + v * np.sin(phi + beta) * d
-        next_v = v + a * d
-        next_phi = phi + (v/lr) * np.sin(beta) * d
+        next_x = x + v * np.cos(phi + beta) * dt
+        next_y = y + v * np.sin(phi + beta) * dt
+        next_v = v + a * dt
+        next_phi = phi + (v/lr) * np.sin(beta) * dt
         return next_x, next_y, next_v, next_phi
     
     def _predict_trajectories(self):
@@ -404,6 +411,7 @@ class DriveableAreaEstimator:
         
         shape_df = pd.DataFrame(points)
         self._boundary = Polygon(shape_df.to_numpy())
+        self._shape_df = shape_df
         return
     
     def _closest_point(self, xy : pd.Series, df : pd.DataFrame) -> pd.Series:
@@ -426,7 +434,9 @@ class DriveableAreaEstimator:
     
 
     def plot_summary(self, 
-            figsize : tuple[float,float] = (4.5,4.5)) -> plt.Figure:
+            figsize : tuple[float,float] = (4.5,4.5),
+            boundary : bool = False,
+        ) -> plt.Figure:
         df = self.traj_summary
 
         # Plot
@@ -441,17 +451,18 @@ class DriveableAreaEstimator:
         )
         ax.plot(self.x0,self.y0,color="red", marker="+")
 
-        # ax.plot(
-        #     shape_df["x"], 
-        #     shape_df["y"], 
-        #     marker=".",
-        #     color="blue"
-        # )
+        if boundary:
+            ax.plot(
+                self.shape_df["x"], 
+                self.shape_df["y"], 
+                marker=".",
+                color="blue"
+            )
 
         ax.set_xlabel("x (m)")
         ax.set_ylabel("y (m)")
 
-        # plt.savefig("out/compy.png")
+        plt.savefig("out/traj.pdf",bbox_inches="tight")
         return fig
     
     
