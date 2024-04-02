@@ -16,15 +16,20 @@ class DriveableAreaTest:
         traci_client = sumo.DriveableAreaClient()
 
         self._manager = sxp.ScenarioManager(pd.read_csv("params.csv"))
-        self._scenario = sumo.DriveableAreaScenario
+        self._scenario = sumo.PedestrianCrossingScenario
         self._tsc = lambda s : s["hhh"] > 0
 
         params = pd.Series({
-            "dut_speed" : 30,
-            "dut_dist" : 100,
-            "foe_speed" : 25,
-            "foe_dist" : 70,
+            "s0.A" : 5,
+            "s0.B" : 7,
+            "s0.C" : 8.5,
+            "dist.BA" : 20,
+            "dist.CA" : 0,
+            "dist.PA" : 20,
+            "dist.P0" : 0,
+            "lane_change_dur" : 5
         })
+        
         self.scenario(params)
 
         traci.close()
