@@ -1,0 +1,21 @@
+Integration method was set to 'ballistic', since a default action step length was specified.
+Loading net-file from '/home/gossq/git-projects/Vehicle-Kinematics-Model/map/3-roads.net.xml' ... done (1ms).
+Loading done.
+Simulation started with time: 0.00.
+Simulation ended at time: 0.40
+Performance: 
+ Duration: 20.10s
+ TraCI-Duration: 0.38s
+ Real time factor: 0.0198975
+ UPS: 0.198975
+ UPS-Persons: 0.198975
+Vehicles: 
+ Inserted: 1
+ Running: 1
+ Waiting: 0
+Persons: 
+ Inserted: 1
+ Running: 1
+
+DijkstraRouter answered 1 queries and explored 8.00 edges on average.
+DijkstraRouter spent 0.00s answering queries (0.00ms on average).

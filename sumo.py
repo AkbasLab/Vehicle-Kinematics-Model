@@ -15,6 +15,12 @@ import matplotlib.pyplot as plt
 import constants
 import utils
 
+import shapely.geometry
+
+
+
+from driveable_area import DriveableAreaEstimator
+
 __FILE_DIR__ = os.path.dirname(os.path.abspath(__file__))
 __MAP_DIR__ = "%s/map" % __FILE_DIR__
 __INIT_STATE_FN__ = "%s/init-state.xml" % __MAP_DIR__
@@ -120,7 +126,7 @@ class DriveableAreaClient(TraCIClient):
 
             # Logging
             "--error-log" : "%s/error.txt" % __MAP_DIR__,
-            # "--log" : "%s/log.txt" % map_dir,
+            "--log" : "%s/log.txt" % __MAP_DIR__,
 
             # Quiet Mode
             "--no-warnings" : "",
@@ -204,15 +210,17 @@ class DriveableAreaScenario(sxp.Scenario):
         
         self._add_vehicles()
         self._init_view()
+        self._add_trajectory_polygons()
 
         # input("hhhh")
 
         # Run simulation
+        warmup_time = traci.simulation.getTime()
+        end_time = warmup_time + constants.kinematics_model.time_window
         while traci.simulation.getMinExpectedNumber() > 0:
-            # if traci.vehicle.getIDCount() != 2:
-            #     break
-            # # self._update_score()
             traci.simulationStep()
+            if traci.simulation.getTime() >= end_time:
+                break
         return
     
     def _add_vehicles(self):
@@ -225,7 +233,7 @@ class DriveableAreaScenario(sxp.Scenario):
         traci.vehicle.setColor(self.A, constants.RGBA.light_blue)
 
         accel_a = traci.vehicle.getAccel(self.A)
-        speed = utils.kph2mps(self.params["s0.A"])
+        speed = self.params["s0.A"]
         traci.vehicle.setAccel(self.A, 1000)
         traci.vehicle.setSpeed(self.A, speed)
         traci.vehicle.setLaneChangeMode(self.A, 0) # No lane change
@@ -238,7 +246,7 @@ class DriveableAreaScenario(sxp.Scenario):
             traci.vehicle.setColor(self.B, constants.RGBA.rosey_red)
 
             accel_b = traci.vehicle.getAccel(self.B)
-            speed = utils.kph2mps(self.params["s0.B"])
+            speed = self.params["s0.B"]
             traci.vehicle.setAccel(self.B, 1000)
             traci.vehicle.setSpeed(self.B, speed)
 
@@ -250,15 +258,26 @@ class DriveableAreaScenario(sxp.Scenario):
             traci.vehicle.setColor(self.C, constants.RGBA.lime_green)
 
             accel_c = traci.vehicle.getAccel(self.C)
-            speed = utils.kph2mps(self.params["s0.C"])
+            speed = self.params["s0.C"]
             traci.vehicle.setAccel(self.C, 1000)
             traci.vehicle.setSpeed(self.C, speed)
             traci.vehicle.setLaneChangeMode(self.C, 0) # No Lane Change
 
+        if self.p_enabled:
+            """
+            Add Pedestrian
+            """
+            cross_walk_len = 12.8
+            traci.person.add(self.P, ":J5_c0", pos= self.params["dist.P0"])
+            traci.person.appendWalkingStage(self.P, [":J5_c0"], cross_walk_len)
+            traci.person.setColor(self.P, constants.RGBA.yellow)
+            traci.person.setSpeed(self.P,0)
 
         
 
         # Spawn Vehicles
+        traci.simulationStep()
+
         traci.simulationStep()
 
         
@@ -276,7 +295,7 @@ class DriveableAreaScenario(sxp.Scenario):
                 "%s_%d" % (self.start_eid, self.lane_a), 
                 self.dist_a
             )
-            traci.vehicle.setSpeed(self.A,-1) # Give control back to sumo
+            
 
             if self.b_enabled:
                 # Vehicle B
@@ -286,7 +305,7 @@ class DriveableAreaScenario(sxp.Scenario):
                     "%s_%d" % (self.start_eid, self.lane_b), 
                     self.dist_a + self.params["dist.BA"]
                 )
-                traci.vehicle.setSpeed(self.B, -1) # Give control back to sumo
+                
             
             if self.c_enabled:
                 # Vehicle C
@@ -296,21 +315,27 @@ class DriveableAreaScenario(sxp.Scenario):
                     "%s_%d" % (self.start_eid, self.lane_c), 
                     self.dist_a + self.params["dist.CA"]
                 )
-                traci.vehicle.setSpeed(self.C, -1) # Give control back to sumo
+                
 
+            
+        
 
             # Get up to speed
             if i == 0:
                 traci.simulationStep()
-            else:
-                if self.p_enabled:
-                    """
-                    Add Pedestrian
-                    """
-                    cross_walk_len = 12.8
-                    traci.person.add(self.P, ":J5_c0", pos= self.params["dist.P0"])
-                    traci.person.appendWalkingStage(self.P, [":J5_c0"], cross_walk_len)
-                    traci.person.setColor(self.P, constants.RGBA.yellow)
+
+                
+
+
+        # Give speed control back to SUMO
+        traci.vehicle.setSpeed(self.A,-1)
+        if self.b_enabled:
+            traci.vehicle.setSpeed(self.B, -1) 
+        if self.c_enabled:
+            traci.vehicle.setSpeed(self.C, -1) 
+        if self.p_enabled:
+            traci.person.setSpeed(self.P,-1)
+            
 
         if self.c_enabled:
             traci.vehicle.changeLaneRelative(
@@ -319,6 +344,7 @@ class DriveableAreaScenario(sxp.Scenario):
                 3
             )
 
+        
         
         return
 
@@ -334,32 +360,128 @@ class DriveableAreaScenario(sxp.Scenario):
         traci.gui.trackVehicle(view_id, self.A)
         return
         
-
-    # def _update_score(self):
-    #     """
-    #     The model properties are based on the sumo default passenger vehicle
-    #      which i a VW Golf MK7
-    #     """
-    #     x,y = traci.vehicle.getPosition(self.DUT_ID)
-    #     params = pd.Series({
-    #         "wheelbase.m" : constants.dut.wheelbase,
-    #         "max_steer.rad" : utils.deg2rad(constants.dut.max_steering_angle),
-    #         "time_window.s" : constants.kbm.time_window,
-    #         "delta_time.s" : constants.kbm.delta_time,
-    #         "x.m" : x,
-    #         "y.m" : y,
-    #         "yaw.rad" : utils.deg2rad(traci.vehicle.getAngle(self.DUT_ID)),
-    #         "v.mps" : traci.vehicle.getSpeed(self.DUT_ID),
-    #         "a_min.mps^2" : -6, #-traci.vehicle.getEmergencyDecel(self.DUT_ID),
-    #         "a_max.mps^2" : 4 #traci.vehicle.getAccel(self.DUT_ID)
-    #     })
+    def _add_trajectory_polygons(self):
         
-    #     KinematicBicycleModelScenario(params)
+        """
+        Convert Maja's ids to steering angles
+        """
+        traj_ids = np.array([5,4,3,2,1.5,1,.5,0,-.5,-1.5,-2,-3,-4,-5])
+        traj_ids = (traj_ids + 5) / 10
+        delta_samples = [
+            sxp.project(
+                - constants.dut.max_steering_angle, 
+                constants.dut.max_steering_angle, 
+                tid
+            ) for tid in traj_ids
+        ]        
 
 
-    #     traci.close()
-    #     quit()
-        # return
+        """
+        Construct the estimator
+        """
+        x, y = traci.vehicle.getPosition(self.A)
+        dae = DriveableAreaEstimator(
+            a_min = -traci.vehicle.getEmergencyDecel(self.A),
+            a_max = traci.vehicle.getAccel(self.A),
+            n_intervals_a = constants.kinematics_model.n_intervals_a,
+            delta_min = -constants.dut.max_steering_angle,
+            delta_max = constants.dut.max_steering_angle,
+            delta_samples = delta_samples,
+            v_max = traci.vehicle.getMaxSpeed(self.A),
+            lf = constants.dut.wheelbase / 2,
+            lr = constants.dut.wheelbase / 2,
+            time_window = constants.kinematics_model.time_window,
+            dt = constants.kinematics_model.dt,
+            x0 = x,
+            y0 = y,
+            v0 = traci.vehicle.getSpeed(self.A),
+            phi0 = traci.vehicle.getAngle(self.A)-90,
+            width = traci.vehicle.getWidth(self.A)
+        )
+        
+
+        """
+        Shorten Trajectory Polygons
+        """
+        # Get lane shapes
+        eid = traci.vehicle.getRoadID(self.A)
+        edge_polygon = self._get_edge_polygon(eid)
+
+
+        # Ped specific
+        if self.rid == "ped":
+            ped_e_polygon = self._get_edge_polygon("pedE")
+            patch_polygon = shapely.geometry.Polygon([
+                [244.85,-30.03], 
+                [254.21,-30.03], 
+                [254.19,-36.38], 
+                [245.41,-36.39], 
+                [244.87,-30.06]
+            ])
+            edge_polygon = edge_polygon.union(patch_polygon)
+            edge_polygon = edge_polygon.union(ped_e_polygon)
+
+
+        # Shorten
+        df = dae.trajectory_polygons
+        df["polygon"] = [polygon.intersection(edge_polygon) \
+         for polygon in df["polygon"]]
+        
+
+
+
+        """
+            Create Polygons in SUMO Optional
+        """
+        if constants.sumo.gui and constants.sumo.show_trajectories:
+            prefix = "traj_"
+            for i in range(len(dae.trajectory_polygons.index)):
+                s = dae.trajectory_polygons.iloc[i]
+                shape : shapely.geometry.Polygon = s["polygon"]
+                traci.polygon.add(
+                    polygonID = "%s%d" % (prefix, i),
+                    shape = list(shape.boundary.coords),
+                    color = constants.RGBA.light_blue,
+                    # fill = True,
+                    layer = constants.presentation_layers.above_crosswalk,
+                    lineWidth = 0.1
+                )
+                continue
+            # input("pause")
+
+
+        
+        # traci.close()
+        # quit()
+        return
+    
+    def _get_edge_polygon(self, eid : str) -> shapely.geometry.Polygon:
+        """
+        Get the polygon of an edge by iterating through lanes
+        """
+        n_lanes = traci.edge.getLaneNumber(eid)
+        polygons : list[shapely.geometry.Polygon] = []
+        for i_lane in range(n_lanes):
+            lid = "%s_%d" % (eid, i_lane)
+            # Exclude pedestrian edges
+            if "pedestrian" in traci.lane.getAllowed(lid):
+                continue
+            shape = traci.lane.getShape(lid)
+            width = traci.lane.getWidth(lid)
+            linestring = shapely.geometry.LineString(shape)
+            polygon = utils.linestring2polygon(linestring,width)
+            polygons.append(polygon)
+            continue
+        
+        if len(polygons) == 1:
+            return polygons[0]
+        
+        #Join lanes
+        polygon = polygons[0]
+        for i in range(1,len(polygons)):
+            polygon = polygon.union(polygons[i])
+        return polygon
+
     
     @property
     def score(self) -> pd.Series:

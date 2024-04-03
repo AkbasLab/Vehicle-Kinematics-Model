@@ -1,6 +1,7 @@
 import numpy as np
 import scenarioxp as sxp
 import pickle
+import shapely.geometry
 
 def mps2kph(mps : float) -> float:
     return 3.6 * mps
@@ -45,3 +46,20 @@ def project_point(
     new_x = x + distance * np.cos(angle_radians)
     new_y = y + distance * np.sin(angle_radians)
     return new_x, new_y
+
+def linestring2polygon(
+        linestring : shapely.geometry.LineString, 
+        width : float
+    ) -> shapely.geometry.Polygon:
+    """
+    Transforms a @linestring into a Polygon given a @width
+    by buffering the LineString with the given width to create a polygon
+    """
+    return linestring.buffer(width / 2, cap_style=3, join_style=2)
+
+
+def _test():
+    return
+
+if __name__ == "__main__":
+    _test()

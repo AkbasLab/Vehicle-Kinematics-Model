@@ -16,7 +16,6 @@ class DriveableAreaEstimator:
             n_intervals_a : int,
             delta_min : float,
             delta_max : float,
-            n_intervals_delta : int,
             v_max : float,
             lf : float,
             lr : float,
@@ -26,6 +25,7 @@ class DriveableAreaEstimator:
             y0 : float,
             v0 : float,
             phi0 : float,
+            n_intervals_delta : int = 5,
             delta_samples : list[float] = [],
             width : float = 0
         ):
@@ -39,7 +39,6 @@ class DriveableAreaEstimator:
             n_intervals_a : # of samples between a_min and a_max
             delta_min : min steering angle of front axle (degrees)
             delta_max : min steering angle of front axle (degrees)
-            n_intervals_delta : # of samples between delta_min and delta_max
             v_max : Max vehicle speed (mps)
             lf : Distance from front axle to center of mass (m)
             lr : Distance from rear axle to center of mass (m)
@@ -51,6 +50,7 @@ class DriveableAreaEstimator:
             phi_0 : Initial vehicle heading (degrees).
 
         :: OPTIONAL PARAMETERS ::
+            n_intervals_delta : # of samples between delta_min and delta_max
             delta_samples : Explicit steering angle values values of front axle
                 (degrees)
             width : Vehicle width (m)
@@ -311,6 +311,20 @@ class DriveableAreaEstimator:
             for delta in self.delta_samples:
                 x,y,v,phi = self.x0, self.y0, self.v0, self.phi0
                 time = self.dt
+
+                # Root
+                s = pd.Series({
+                    "x" : x,
+                    "y" : y,
+                    "v" : v,
+                    "phi" : phi,
+                    "a" : a,
+                    "delta" : delta,
+                    "i_traj" : i_traj
+                })
+                traj_hist.append(s)
+
+
                 while time < self.time_window:
                     time += self.dt
                     x,y,v,phi = self.predict(
