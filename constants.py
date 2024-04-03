@@ -21,10 +21,11 @@ Sumo client settings
 """
 class sumo:
     gui = True
-    delay = 100
-    start = False
+    delay = 500
+    start = True
     quit_on_end = True
     seed = 333
-    default_action_step_length = 1.0
+    default_action_step_length = 0.1
+    step_length = 0.1
     
     

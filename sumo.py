@@ -142,6 +142,7 @@ class DriveableAreaClient(TraCIClient):
             config["--quit-on-end"] = ""
         config["--seed"] = constants.sumo.seed
         config["--default.action-step-length"] = constants.sumo.default_action_step_length
+        config["--step-length"] = constants.sumo.step_length
 
         super().__init__(config)
         traci.simulation.saveState(__INIT_STATE_FN__)
