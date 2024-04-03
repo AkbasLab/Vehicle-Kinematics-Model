@@ -204,6 +204,8 @@ class DriveableAreaScenario(sxp.Scenario):
         self._add_vehicles()
         self._init_view()
 
+        # input("hhhh")
+
         # Run simulation
         while traci.simulation.getMinExpectedNumber() > 0:
             # if traci.vehicle.getIDCount() != 2:
@@ -299,6 +301,15 @@ class DriveableAreaScenario(sxp.Scenario):
             # Get up to speed
             if i == 0:
                 traci.simulationStep()
+            else:
+                if self.p_enabled:
+                    """
+                    Add Pedestrian
+                    """
+                    cross_walk_len = 12.8
+                    traci.person.add(self.P, ":J5_c0", pos= self.params["dist.P0"])
+                    traci.person.appendWalkingStage(self.P, [":J5_c0"], cross_walk_len)
+                    traci.person.setColor(self.P, constants.RGBA.yellow)
 
         if self.c_enabled:
             traci.vehicle.changeLaneRelative(
@@ -307,14 +318,7 @@ class DriveableAreaScenario(sxp.Scenario):
                 3
             )
 
-        if self.p_enabled:
-            """
-            Add Pedestrian
-            """
-            cross_walk_len = 12.8
-            traci.person.add(self.P, ":J5_c0", pos= self.params["dist.P0"])
-            traci.person.appendWalkingStage(self.P, [":J5_c0"], cross_walk_len)
-            traci.person.setColor(self.P, constants.RGBA.yellow)
+        
         return
 
     

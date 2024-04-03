@@ -25,13 +25,15 @@ class DriveableAreaEstimator:
             x0 : float,
             y0 : float,
             v0 : float,
-            phi0 : float
+            phi0 : float,
+            delta_samples : list[float] = [],
+            width : float = 0
         ):
         """
         Generates vehicle trajectories using a kinematic bicycle driving model
         with wheel sleep.
 
-        :: PARAMETERS ::
+        :: REQUIRED PARAMETERS ::
             a_min : Min acceleration (mps^2)
             a_max : Max acceleration (mps^2)
             n_intervals_a : # of samples between a_min and a_max
@@ -47,7 +49,13 @@ class DriveableAreaEstimator:
             y0 : Initial y position (m)
             v0 : Initial speed (mps)
             phi_0 : Initial vehicle heading (degrees).
+
+        :: OPTIONAL PARAMETERS ::
+            delta_samples : Explicit steering angle values values of front axle
+                (degrees)
+            width : Vehicle width (m)
         """
+        self._width = width
 
         self._a_min = float(a_min)
         self._a_max = float(a_max)
@@ -61,11 +69,15 @@ class DriveableAreaEstimator:
         self._delta_min = utils.deg2rad(float(delta_min))
         self._delta_max = utils.deg2rad(float(delta_max))
         self._n_intervals_delta = int(float(n_intervals_delta))
-        self._delta_samples = utils.n_intervals(
-            self.delta_min, 
-            self.delta_max, 
-            self.n_intervals_delta
-        )
+        if not delta_samples:
+            self._delta_samples = utils.n_intervals(
+                self.delta_min, 
+                self.delta_max, 
+                self.n_intervals_delta
+            )
+        else:
+            self._delta_samples = \
+                [utils.deg2rad(delta) for delta in delta_samples]
         
         self._v_max = float(v_max)
         self._lf = float(lf)
@@ -81,7 +93,9 @@ class DriveableAreaEstimator:
 
         self._predict_trajectories()
         self._create_concise_trajectories()
-        self._find_exterior_boundary()
+        self._boundary, self._shape_df = \
+            self._find_exterior_boundary(self.traj_summary)
+        self._find_all_trajectory_boundaries()
         # self._plot_summary()
         return
     
@@ -240,6 +254,20 @@ class DriveableAreaEstimator:
         """
         return self._shape_df
     
+    @property
+    def width(self) -> float:
+        """
+        Vehicle Width in meters
+        """
+        return self._width
+    
+    @property
+    def trajectory_polygons(self) -> pd.DataFrame:
+        """
+        Dataframe of polygons for each tracjectoy.
+        """
+        return self._trajectory_polygons
+
     def predict(self, 
             x : float, 
             y : float, 
@@ -270,7 +298,9 @@ class DriveableAreaEstimator:
         next_v = v + a * dt
         next_phi = phi + (v/lr) * np.sin(beta) * dt
         return next_x, next_y, next_v, next_phi
-    
+
+    # def 
+
     def _predict_trajectories(self):
         """
         Gets vehicle trajectories
@@ -325,8 +355,44 @@ class DriveableAreaEstimator:
         self._traj_summary_concise = pd.DataFrame(data)
         return
     
-    def _find_exterior_boundary(self):
-        df = self.traj_summary
+    def _widen_trajectory(self, 
+            df : pd.DataFrame, angle : float) -> pd.DataFrame:
+        """
+        Widens a trajectory to half of the vehicles width
+
+        :: PARAMETERS ::
+        df : Trajectory dataframe
+        angle : Angle to adjust (in degrees)
+            Use 90 for left and -90 for right
+        """
+        if self.width == 0:
+            return df
+        df = df.copy()
+        angle = utils.deg2rad(angle)
+        half_veh_width = self.width/2
+        for i in range(len(df.index)):
+            s = df.iloc[i]
+            x,y = utils.project_point(
+                s["x"],
+                s["y"],
+                half_veh_width,
+                angle + s["phi"]
+            )
+            df.iloc[i]["x"] = np.round(x, decimals=6)
+            df.iloc[i]["y"] = np.round(y, decimals=6)
+        return df
+
+    def _find_exterior_boundary(self, 
+            df : pd.DataFrame
+        ) -> list[Polygon, pd.DataFrame]:
+        """
+        Finds the exterior boundary given a dataframe @df of trajectory
+        information.
+
+        :: Return ::
+        Returns the boundary as a Shapely Polygon and a Dataframe
+        """
+        df = df.copy()
 
         # The shape begins at the origin.
         origin = pd.Series({"x" : self.x0, "y" : self.y0})
@@ -339,21 +405,23 @@ class DriveableAreaEstimator:
         leftmost_traj = df[
             (df["a"] == df["a"].min()) &
             (df["delta"] == df["delta"].max())
-        ][["x", "y"]]
+        ]
+        leftmost_traj = self._widen_trajectory(leftmost_traj, 90)[["x", "y"]]
         for i in range(len(leftmost_traj.index)):
             points.append(leftmost_traj.iloc[i])
         
+
         """
         Next, follow the trajectory with the same delta increasing in accel
         Starting with the closest points from the previous acceleration
         """
         sorted_accel = np.sort(df["a"].unique()).tolist()
         for i, a in enumerate(sorted_accel[1:], start=1):
-            # print("%d accel: %f" % (i,a))
             traj_df = df[
                 (df["a"] == a) &
                 (df["delta"] == df["delta"].max())
-            ][["x", "y"]]
+            ]
+            traj_df = self._widen_trajectory(traj_df, 90)[["x", "y"]]
             closest_pos = self._closest_point(points[-1], traj_df)
             traj_df = traj_df[traj_df.index >= closest_pos.name]
             for i in range(len(traj_df.index)):
@@ -364,7 +432,9 @@ class DriveableAreaEstimator:
         Then get the trajectories with the max accelerations sorting from
         highest to lowest angle.
         """
-        sorted_delta = np.sort(df["delta"].unique())[::-1].tolist()[1:-1]
+        sorted_delta = np.sort(df["delta"].unique())[::-1].tolist()
+        if self.width == 0:
+            sorted_delta = sorted_delta[1:-1]
         for delta in sorted_delta:
             traj_df = df[
                 (df["a"] == df["a"].max()) &
@@ -381,7 +451,8 @@ class DriveableAreaEstimator:
         rightmost_traj = df[
             (df["a"] == df["a"].min()) &
             (df["delta"] == df["delta"].min())
-        ][["x", "y"]]
+        ]
+        rightmost_traj = self._widen_trajectory(rightmost_traj, -90)[["x", "y"]]
         for i in range(len(rightmost_traj.index)):
             rightmost_points.append(rightmost_traj.iloc[i])
 
@@ -391,11 +462,11 @@ class DriveableAreaEstimator:
         """
         sorted_accel = np.sort(df["a"].unique()).tolist()
         for i, a in enumerate(sorted_accel[1:], start=1):
-            # print("%d accel: %f" % (i,a))
             traj_df = df[
                 (df["a"] == a) &
                 (df["delta"] == df["delta"].min())
-            ][["x", "y"]]
+            ]
+            traj_df = self._widen_trajectory(traj_df, -90)[["x", "y"]]
             closest_pos = self._closest_point(rightmost_points[-1], traj_df)
             traj_df = traj_df[traj_df.index >= closest_pos.name]
             for i in range(len(traj_df.index)):
@@ -410,8 +481,24 @@ class DriveableAreaEstimator:
         
         
         shape_df = pd.DataFrame(points)
-        self._boundary = Polygon(shape_df.to_numpy())
-        self._shape_df = shape_df
+        boundary = Polygon(shape_df.to_numpy())
+        # self._shape_df = shape_df
+        return boundary, shape_df
+    
+    def _find_all_trajectory_boundaries(self):
+        df = self.traj_summary.copy()
+        sorted_delta = np.sort(df["delta"].unique())[::-1].tolist()
+        polygons = []
+        for delta in sorted_delta:
+            delta_df = df[df["delta"] == delta]
+            polygon, _ = self._find_exterior_boundary(delta_df)
+            s = pd.Series({
+                "delta" : delta, 
+                "polygon" : polygon
+            })
+            polygons.append(s)
+            continue
+        self._trajectory_polygons = pd.DataFrame(polygons)
         return
     
     def _closest_point(self, xy : pd.Series, df : pd.DataFrame) -> pd.Series:
@@ -426,12 +513,6 @@ class DriveableAreaEstimator:
             axis = 1
         )
         return df[df["dist"] == df["dist"].min()].iloc[0][["x", "y"]]
-    
-    
-
-    
-    
-    
 
     def plot_summary(self, 
             figsize : tuple[float,float] = (4.5,4.5),
@@ -464,8 +545,32 @@ class DriveableAreaEstimator:
 
         plt.savefig("out/traj.pdf",bbox_inches="tight")
         return fig
+
+
+def test():
+    dae = DriveableAreaEstimator(
+        a_min = -6,
+        a_max = 4,
+        n_intervals_a = 3,
+        delta_min = -10,
+        delta_max = 10,
+        n_intervals_delta = 10,
+        v_max = 14,
+        lf = 2.5,
+        lr = 2.5,
+        time_window = 3,
+        dt = 0.1,
+        x0 = 0,
+        y0 = 0,
+        v0 = 0,
+        phi0 = 0,
+        delta_samples = [-10,-8,-6,-4,-3,-2,-1,0,1,2,3,4,6,8,10],
+        # delta_samples = [0],
+        width = 5
+    )
+    dae.plot_summary(boundary=True)
+    return
+
     
-    
-# if __name__ == "__main__":
-    
-#     Drive)
+if __name__ == "__main__":
+    test()

@@ -30,3 +30,18 @@ def save(data, fn : str):
 def load(fn : str):
     with open(fn, "rb") as f:
         return pickle.load(f)
+    
+def project_point(
+        x : float, 
+        y : float, 
+        distance : float, 
+        angle_radians : float
+    ) -> list[float, float]:
+    """
+    Projects an @x,@y point @distance by @angle_radians
+
+    Returns new x,y point.
+    """
+    new_x = x + distance * np.cos(angle_radians)
+    new_y = y + distance * np.sin(angle_radians)
+    return new_x, new_y
