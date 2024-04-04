@@ -58,6 +58,21 @@ def linestring2polygon(
     return linestring.buffer(width / 2, cap_style=3, join_style=2)
 
 
+def gaussian_pdf(x, mu :float = 0, sigma : float = 1):
+    """
+    Calculate the probability density function (PDF) of a Gaussian distribution at point x.
+    
+    Parameters:
+        x: float or array-like, the point(s) at which to evaluate the PDF
+        mu: float, the mean of the Gaussian distribution
+        sigma: float, the standard deviation of the Gaussian distribution
+        
+    Returns:
+        pdf_value: float or array-like, the value(s) of the PDF at point(s) x
+    """
+    pdf_value = 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(-0.5 * ((x - mu) / sigma)**2)
+    return pdf_value
+
 def _test():
     return
 

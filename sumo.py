@@ -16,6 +16,7 @@ import constants
 import utils
 
 import shapely.geometry
+import time
 
 
 
@@ -194,7 +195,8 @@ class DriveableAreaScenario(sxp.Scenario):
         self.c_enabled = c_enabled
         self.p_enabled = p_enabled
         self.rid = rid
-        
+        self.polygon_counter = 0
+
         if self.rid == "triple":
             self.route = ["warmup", "triple"]
             self.start_eid = "triple"
@@ -210,18 +212,163 @@ class DriveableAreaScenario(sxp.Scenario):
         
         self._add_vehicles()
         self._init_view()
-        self._add_trajectory_polygons()
+        
+        self.dut_traj_df = self._predict_dut_trajectory_polygons()
+        self._add_polygons_to_sumo(self.dut_traj_df, constants.RGBA.light_blue)
 
-        # input("hhhh")
+        traci.simulation.saveState(__INIT_STATE_FN__)
+
+        self.veh_path_df = self._find_vehicle_paths()
+        self._calc_trajectory_probability()
+        return
+
+    def _calc_trajectory_probability(self):
+        df = self.veh_path_df
+        
+        """
+        To predict the trajectory likelyhood we use a guassian distribution
+        with mu = 0, sigma = 1.
+        We will estimate it based on the change of angle of the vehicle.
+        """
+        traj_probability = []
+        for i,delta_angle in enumerate(df["delta_angle.deg"]):
+            # Transform into numpy array for easier manipulation
+            delta_angle = np.array(delta_angle)
+            
+            # Subtract road curvature
+            delta_angle -= constants.kinematics_model.road_curvature
+
+            # Case: all zeros
+            if np.all(delta_angle == 0.):
+                x = 0.
+            # Case: Angle turns
+            else:
+                # We only consider the parts which are turning
+                delta_angle = delta_angle[delta_angle != 0]
+                pred_max_steering_angle = abs(delta_angle).max()
+                
+                # The steering angle depends on the actor
+                if df["actor"].iloc == self.P:
+                    max_steering_angle = constants.pedestrian.max_steering_angle
+                else:
+                    max_steering_angle = constants.dut.max_steering_angle
+
+                # Fit it between 0 and max steering angle to get a normal value
+                n = pred_max_steering_angle / max_steering_angle
+
+                # Scale between 0 and 5
+                x = n*5
+
+            # Finally find the probability
+            if constants.kinematics_model.distribution == constants.distribution.gaussian:
+                probability = utils.gaussian_pdf(x, mu=0, sigma=1)
+            else:
+                probability = 1/14
+            traj_probability.append(probability)
+            continue
+
+        df["traj_probability"] = traj_probability
+        return 
+
+
+ 
+
+    def _display_all_paths(self):
+        if not (constants.sumo.gui and constants.sumo.show_path_history):
+            return
+
+        traci.simulation.loadState(__INIT_STATE_FN__)
+
+        color_map = {
+            "A" : constants.RGBA.aquamarine,
+            "B" : constants.RGBA.rosey_red,
+            "C" : constants.RGBA.lime_green,
+            "P" : constants.RGBA.yellow
+        }
+        for i in range(len(self.veh_path_df.index)):
+            df = self.veh_path_df[self.veh_path_df.index == i]
+            color = color_map[df.iloc[0]["actor"]]
+            self._add_polygons_to_sumo( df, color, layer = 7)
+            continue    
+
+        input("pause")
+        return
+
+
+    def _find_vehicle_paths(self) -> pd.DataFrame:
+        """
+        Runs the simulation once to find vehicle paths.
+        """
+        # Dictionary to track vehicle path
+        veh_paths = {}
+        for vid in traci.vehicle.getIDList():
+            veh_paths[vid] = []
+        for pid in traci.person.getIDList():
+            veh_paths[pid] = []
+        self.veh_paths = veh_paths
+
+        # Actor widths
+        actor_widths = []
+        for vid in traci.vehicle.getIDList():
+            actor_widths.append(traci.vehicle.getWidth(vid))
+        for pid in traci.person.getIDList():
+            actor_widths.append(traci.person.getWidth(pid))
+
+        # Actor Angle
+        veh_angles = {}
+        for vid in traci.vehicle.getIDList():
+            veh_angles[vid] = []
+        for pid in traci.person.getIDList():
+            veh_angles[pid] = []
+
+        
 
         # Run simulation
         warmup_time = traci.simulation.getTime()
         end_time = warmup_time + constants.kinematics_model.time_window
         while traci.simulation.getMinExpectedNumber() > 0:
+
+            # Add positions and angles
+            for vid in traci.vehicle.getIDList():
+                veh_paths[vid].append(traci.vehicle.getPosition(vid))
+                veh_angles[vid].append(traci.vehicle.getAngle(vid))
+            for pid in traci.person.getIDList():
+                veh_paths[pid].append(traci.person.getPosition(pid))
+                veh_angles[pid].append(traci.person.getAngle(pid))
+
             traci.simulationStep()
             if traci.simulation.getTime() >= end_time:
                 break
-        return
+        
+        # Make at least 2 coordinate pairs
+        for key,val  in veh_paths.items():
+            if len(val) == 1:
+                veh_paths[key].append([val[0][0]+0.01, val[0][1]])
+        
+
+        # Create the Dataframe
+        veh_path_df = pd.DataFrame({
+            "actor" : veh_paths.keys(),
+            "width" : actor_widths,
+            "linestring" : [shapely.geometry.LineString(val) \
+                            for val in veh_paths.values()],
+        })
+
+        # Create Polygons
+        veh_path_df["polygon"] = veh_path_df.apply(
+            lambda s: utils.linestring2polygon(s["linestring"], s["width"]),
+            axis = 1
+        )
+        
+        # Angle
+        veh_path_df["angle.deg"] = [val for val in veh_angles.values()]
+
+        # Change in Angle
+        delta_angles = [[angle[i] - angle[i-1] for i in range(1,len(angle))] \
+                        for angle in veh_path_df["angle.deg"]]
+        veh_path_df["delta_angle.deg"] = delta_angles
+
+        return veh_path_df
     
     def _add_vehicles(self):
         
@@ -356,16 +503,22 @@ class DriveableAreaScenario(sxp.Scenario):
         
         view_id = "View #0"
         traci.gui.setSchema(view_id, "real world")
-        traci.gui.setZoom(view_id, 400)
+        traci.gui.setZoom(view_id, 800)
         traci.gui.trackVehicle(view_id, self.A)
         return
         
-    def _add_trajectory_polygons(self):
+    def _predict_dut_trajectory_polygons(self) -> pd.DataFrame:
         
         """
         Convert Maja's ids to steering angles
         """
         traj_ids = np.array([5,4,3,2,1.5,1,.5,0,-.5,-1.5,-2,-3,-4,-5])
+
+        if constants.kinematics_model.distribution == constants.distribution.gaussian:
+            traj_probability = utils.gaussian_pdf(traj_ids, mu = 0, sigma = 1)
+        else:
+            traj_probability = np.array([1/14 for _ in range(len(traj_ids))])
+        
         traj_ids = (traj_ids + 5) / 10
         delta_samples = [
             sxp.project(
@@ -374,6 +527,8 @@ class DriveableAreaScenario(sxp.Scenario):
                 tid
             ) for tid in traj_ids
         ]        
+
+        
 
 
         """
@@ -426,33 +581,34 @@ class DriveableAreaScenario(sxp.Scenario):
         df = dae.trajectory_polygons
         df["polygon"] = [polygon.intersection(edge_polygon) \
          for polygon in df["polygon"]]
-        
+        df["traj_probability"] = traj_probability
 
-
-
+        return df
+    
+    def _add_polygons_to_sumo(self, 
+            df : pd.DataFrame, 
+            rgba : tuple[int,int,int,int],
+            layer : int = 6
+        ):
         """
             Create Polygons in SUMO Optional
         """
-        if constants.sumo.gui and constants.sumo.show_trajectories:
-            prefix = "traj_"
-            for i in range(len(dae.trajectory_polygons.index)):
-                s = dae.trajectory_polygons.iloc[i]
-                shape : shapely.geometry.Polygon = s["polygon"]
-                traci.polygon.add(
-                    polygonID = "%s%d" % (prefix, i),
-                    shape = list(shape.boundary.coords),
-                    color = constants.RGBA.light_blue,
-                    # fill = True,
-                    layer = constants.presentation_layers.above_crosswalk,
-                    lineWidth = 0.1
-                )
-                continue
-            # input("pause")
-
-
-        
-        # traci.close()
-        # quit()
+        if not (constants.sumo.gui and constants.sumo.show_trajectories):
+            return
+        prefix = "poly_"
+        for i in range(len(df.index)):
+            s = df.iloc[i]
+            shape : shapely.geometry.Polygon = s["polygon"]
+            traci.polygon.add(
+                polygonID = "%s%d" % (prefix, self.polygon_counter),
+                shape = list(shape.boundary.coords),
+                color = rgba,
+                # fill = True,
+                layer = layer,
+                lineWidth = 0.1
+            )
+            self.polygon_counter += 1 
+            continue
         return
     
     def _get_edge_polygon(self, eid : str) -> shapely.geometry.Polygon:
