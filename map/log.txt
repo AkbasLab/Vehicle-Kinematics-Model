@@ -1,19 +1,19 @@
 Integration method was set to 'ballistic', since a default action step length was specified.
 Loading net-file from '/home/gossq/git-projects/Vehicle-Kinematics-Model/map/3-roads.net.xml' ... done (1ms).
 Loading done.
-Simulation started with time: 0.00.
-Loading state from '/home/gossq/git-projects/Vehicle-Kinematics-Model/map/init-state.xml' ... done (29ms).
-Simulation ended at time: 0.30
+Simulation version 1.19.0 started with time: 0.00.
+Simulation ended at time: 3.30
 Reason: TraCI requested termination.
 Performance: 
- Duration: 122.24s
- TraCI-Duration: 0.45s
- Real time factor: 0.00245423
- UPS: 0.548111
+ Duration: 0.37s
+ TraCI-Duration: 0.37s
+ Real time factor: 8.82353
+ UPS: 189.839572
 Vehicles: 
  Inserted: 3
- Running: 3
+ Running: 2
  Waiting: 0
+ Teleports: 1 (Collisions: 1)
 
-DijkstraRouter answered 3 queries and explored 5.00 edges on average.
+DijkstraRouter answered 3 queries and explored 6.67 edges on average.
 DijkstraRouter spent 0.00s answering queries (0.00ms on average).

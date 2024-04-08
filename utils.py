@@ -80,6 +80,17 @@ def entropy(px : float) -> float:
     """
     return -px * np.log2(px)
 
+def closest_polygon(
+        point : shapely.geometry.Point, 
+        multipolygon : shapely.geometry.multipolygon.MultiPolygon
+    ) -> shapely.geometry.Polygon:
+    """
+    Finds the closest subpolygon in @multipolygon to @point
+    """
+    distances = [point.distance(poly.centroid) for poly in multipolygon]
+    closest = multipolygon[distances.index(min(distances))]
+    return closest
+
 def _test():
     return
 

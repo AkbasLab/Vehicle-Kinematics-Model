@@ -16,7 +16,7 @@ import constants
 import utils
 
 import shapely.geometry
-import time
+
 
 
 
@@ -26,6 +26,7 @@ __FILE_DIR__ = os.path.dirname(os.path.abspath(__file__))
 __MAP_DIR__ = "%s/map" % __FILE_DIR__
 __INIT_STATE_FN__ = "%s/init-state.xml" % __MAP_DIR__
 __LOAD_CMD_FN__ = "%s/load-cmd.pkl" % __MAP_DIR__
+
 
 
 class TraCIClient:
@@ -185,7 +186,7 @@ class DriveableAreaScenario(sxp.Scenario):
         self.C = "C"
         self.P = "P"
     
-        self._score = pd.Series({"hhh" : 50})
+        
 
         self.lane_change_rel_c = lane_change_rel_c
         self.lane_a = lane_a
@@ -225,18 +226,77 @@ class DriveableAreaScenario(sxp.Scenario):
         self.entropy = self._sum_entropy_fast()
         self.traj_entropy_breakdown_df = self._breakdown_trajectory_entropy()
 
-        self._driveable_area()
+        self._score = pd.Series({"entropy" : self.entropy})
 
         self._display_all_paths()
-
         return
     
     
     def _driveable_area(self):
+        """
+        Non DUT paths
+        """
+        foe_paths = self.veh_path_df[self.veh_path_df["actor"] != self.A]
+        
+        """
+        Car shapes
+        """
+        print(foe_paths)
+        # for actor in foe_paths["actor"]:
+        #     self.length = traci.vehicle.getLen
+
+        """
+        Split the driveable Area
+        """
+        data = {"polygon" : []}
+        for poly_dut in self.dut_traj_df["polygon"]:
+            poly : shapely.geometry.Polygon = poly_dut
+            # Get origin
+            origin = shapely.geometry.Point(poly.exterior.coords[0])
+
+            # Split up the polygon by path
+            for poly_foe in foe_paths["polygon"]:
+                poly = poly.difference(poly_foe)
+                continue
+            
+            # If it's a multipolygon, we must find the closest 
+            if isinstance(poly, shapely.geometry.multipolygon.MultiPolygon):
+                poly = utils.closest_polygon(origin, poly)
+            
+            data["polygon"].append(poly)
+            continue
+        df = pd.DataFrame(data)
+        
+        
+        # 
+        self._add_polygons_to_sumo(df, constants.RGBA.yellow, layer=8)
         return 
+    
+
+    def _display_all_paths(self):
+        if not (constants.sumo.gui and constants.sumo.show_path_history):
+            return
+
+        traci.simulation.loadState(__INIT_STATE_FN__)
+
+        color_map = {
+            "A" : constants.RGBA.aquamarine,
+            "B" : constants.RGBA.rosey_red,
+            "C" : constants.RGBA.lime_green,
+            "P" : constants.RGBA.yellow
+        }
+        for i in range(len(self.veh_path_df.index)):
+            df = self.veh_path_df[self.veh_path_df.index == i]
+            color = color_map[df.iloc[0]["actor"]]
+            self._add_polygons_to_sumo( df, color, layer = 7)
+            continue    
+
+        input("pause")
+        return
+
 
     
-    def _breakdown_trajectory_entropy(self):
+    def _breakdown_trajectory_entropy(self) -> pd.DataFrame:
         # print(self.dut_traj_df)
         """
         Breakdown trajectory entropy into a neat table
@@ -259,8 +319,8 @@ class DriveableAreaScenario(sxp.Scenario):
                 * s["entropy"]
             continue
 
-        print(df)
-        return
+        # print(df)
+        return df
 
     def _sum_entropy_fast(self) -> float:
         """
@@ -358,27 +418,6 @@ class DriveableAreaScenario(sxp.Scenario):
 
  
 
-    def _display_all_paths(self):
-        if not (constants.sumo.gui and constants.sumo.show_path_history):
-            return
-
-        traci.simulation.loadState(__INIT_STATE_FN__)
-
-        color_map = {
-            "A" : constants.RGBA.aquamarine,
-            "B" : constants.RGBA.rosey_red,
-            "C" : constants.RGBA.lime_green,
-            "P" : constants.RGBA.yellow
-        }
-        for i in range(len(self.veh_path_df.index)):
-            df = self.veh_path_df[self.veh_path_df.index == i]
-            color = color_map[df.iloc[0]["actor"]]
-            self._add_polygons_to_sumo( df, color, layer = 7)
-            continue    
-
-        input("pause")
-        return
-
 
     def _find_vehicle_paths(self) -> pd.DataFrame:
         """
@@ -398,6 +437,13 @@ class DriveableAreaScenario(sxp.Scenario):
             actor_widths.append(traci.vehicle.getWidth(vid))
         for pid in traci.person.getIDList():
             actor_widths.append(traci.person.getWidth(pid))
+
+        # Actor Lengths
+        # actor_lengths = []
+        # for vid in traci.vehicle.getIDList():
+        #     actor_lengths.append(traci.vehicle.getLength(vid)) 
+        # for pid in traci.person.getIDList():
+        #     actor_lengths.append(traci.person.getLength(pid))
 
         # Actor Angle
         veh_angles = {}
@@ -435,23 +481,49 @@ class DriveableAreaScenario(sxp.Scenario):
         veh_path_df = pd.DataFrame({
             "actor" : veh_paths.keys(),
             "width" : actor_widths,
+            # "length" : actor_lengths,
             "linestring" : [shapely.geometry.LineString(val) \
                             for val in veh_paths.values()],
         })
 
-        # Create Polygons
-        veh_path_df["polygon"] = veh_path_df.apply(
-            lambda s: utils.linestring2polygon(s["linestring"], s["width"]),
-            axis = 1
-        )
-        
-        # Angle
+
+         # Angle
         veh_path_df["angle.deg"] = [val for val in veh_angles.values()]
 
         # Change in Angle
         delta_angles = [[angle[i] - angle[i-1] for i in range(1,len(angle))] \
                         for angle in veh_path_df["angle.deg"]]
         veh_path_df["delta_angle.deg"] = delta_angles
+
+
+        # Expand the linestring back to cover the length of the cars.
+        # corrected_linestrings = []
+        # for i in range(len(veh_path_df.index)):
+        #     s = veh_path_df.iloc[i]
+        #     origin = s["linestring"].coords[0]
+        #     p0 = utils.project_point(
+        #         *origin, 
+        #         -(s["length"]*.9), 
+        #         utils.deg2rad(s["angle.deg"][0]-90)
+        #     )
+        #     linestring = [p0]
+        #     [linestring.append(p) for p in s["linestring"].coords]
+        #     linestring = shapely.geometry.LineString(linestring)    
+        #     corrected_linestrings.append(linestring)
+        #     continue
+        # veh_path_df["linestring"] = corrected_linestrings
+        
+        
+        # Create Polygons
+        veh_path_df["polygon"] = veh_path_df.apply(
+            lambda s: utils.linestring2polygon(s["linestring"], s["width"]),
+            axis = 1
+        )
+        
+       
+
+
+        
 
         return veh_path_df
     
@@ -463,6 +535,7 @@ class DriveableAreaScenario(sxp.Scenario):
         traci.route.add(self.rid, self.route)
         traci.vehicle.add(self.A, self.rid, departLane=self.lane_a)
         traci.vehicle.setColor(self.A, constants.RGBA.light_blue)
+        traci.vehicle.setMaxSpeed(self.A, constants.dut.max_speed)
 
         accel_a = traci.vehicle.getAccel(self.A)
         speed = self.params["s0.A"]
@@ -476,6 +549,7 @@ class DriveableAreaScenario(sxp.Scenario):
             """
             traci.vehicle.add(self.B, self.rid)
             traci.vehicle.setColor(self.B, constants.RGBA.rosey_red)
+            traci.vehicle.setMaxSpeed(self.B, constants.dut.max_speed)
 
             accel_b = traci.vehicle.getAccel(self.B)
             speed = self.params["s0.B"]
@@ -488,6 +562,7 @@ class DriveableAreaScenario(sxp.Scenario):
             """
             traci.vehicle.add(self.C, self.rid)
             traci.vehicle.setColor(self.C, constants.RGBA.lime_green)
+            traci.vehicle.setMaxSpeed(self.C, constants.dut.max_speed)
 
             accel_c = traci.vehicle.getAccel(self.C)
             speed = self.params["s0.C"]
@@ -583,7 +658,8 @@ class DriveableAreaScenario(sxp.Scenario):
     
     
     def _init_view(self):
-        if not traci.hasGUI():
+        if not constants.sumo.gui:
+        # if not traci.hasGUI():
             return
         
         view_id = "View #0"

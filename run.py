@@ -3,6 +3,7 @@ warnings.simplefilter('ignore')
 
 import scenarioxp as sxp
 import sumo
+import constants
 
 import traci
 import pandas as pd
@@ -12,26 +13,32 @@ from typing import Callable
 
 class DriveableAreaTest:
     def __init__(self):
-        self._rng = np.random.RandomState(seed=444)
+        """
+        Load Data
+        """
+        self._rng = np.random.RandomState( seed = constants.config.seed)
         traci_client = sumo.DriveableAreaClient()
+        self._tsc = constants.config.tsc
 
-        self._manager = sxp.ScenarioManager(pd.read_csv("params.csv"))
-        self._scenario = sumo.CutInScenario
-        self._tsc = lambda s : s["hhh"] > 0
+        scenario_map = {
+            constants.scenario.cut_in : sumo.CutInScenario,
+            constants.scenario.no_traffic : sumo.NoTrafficScenario,
+            constants.scenario.two_lane_traffic : sumo.TwoLaneTrafficScenario,
+            constants.scenario.three_lane_traffic : sumo.ThreeLaneTrafficScenario,
+            constants.scenario.pedestrian_crossing : sumo.PedestrianCrossingScenario
+        }
 
+        fn = "scenarios/%s.csv" % constants.config.scenario
+        self._manager = sxp.ScenarioManager(pd.read_csv(fn))
+        self._scenario = scenario_map[constants.config.scenario]
         
-        params = pd.Series({
-            "s0.A" : 5,
-            "s0.B" : 12,
-            "s0.C" : 10,
-            "dist.BA" : 20,
-            "dist.CA" : 5,
-            "dist.PA" : 20,
-            "dist.P0" : 0,
-            "lane_change_dur" : 0.5
-        })
-        
-        self.scenario(params)
+        """
+        Choose Strategy
+        """
+        if constants.config.strategy == constants.strategy.monte_carlo:
+            self.monte_carlo_strategy()
+        else:
+            raise NotImplementedError("Strategy %s not supported." % constants.config.strategy)
 
         traci.close()
         return
@@ -50,6 +57,23 @@ class DriveableAreaTest:
 
     def random_seed(self):
         return self._rng.randint(2**32-1)
+    
+    def monte_carlo_strategy(self):
+        exp = sxp.SequenceExplorer(
+            strategy = sxp.SequenceExplorer.MONTE_CARLO,
+            seed = self.random_seed(),
+            scenario_manager = self.manager,
+            scenario = self._scenario,
+            target_score_classifier = self.tsc,
+            scramble = False,
+            fast_foward = False
+        )
+        for i in range(constants.config.n_tests):
+            print("Test %d/%d" % (i+1, constants.config.n_tests), end="\r")
+            exp.step()
+        print("\nComplete!")
+        return
+
     
  
 

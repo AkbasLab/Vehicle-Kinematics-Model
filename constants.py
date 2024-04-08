@@ -1,10 +1,37 @@
 
 """
+Scenario names
+"""
+class scenario:
+    cut_in = "cut-in"
+    no_traffic = "no-traffic"
+    two_lane_traffic = "2-lane-traffic"
+    three_lane_traffic = "3-lane-traffic"
+    pedestrian_crossing = "pedestrian"
+
+"""
+Testing Strategies
+"""
+class strategy:
+    monte_carlo = "mc"
+
+"""
+Running configuration Options
+"""
+class config:
+    scenario = scenario.cut_in
+    tsc = lambda s : False
+    seed = 444
+    strategy = strategy.monte_carlo
+    n_tests = 50
+
+"""
 DUT SETTINGS
 """
 class dut:
     wheelbase = 2.63        # m
     max_steering_angle = 10 # degrees
+    max_speed = 15          # mps
 
 """
 PEDESTRIAN SETTINGS
@@ -29,8 +56,6 @@ class kinematics_model:
     dt = 0.1            # seconds
     road_curvature = 0. # degrees
     distribution = distribution.gaussian
-
-
 
 """
 Colors
