@@ -220,7 +220,92 @@ class DriveableAreaScenario(sxp.Scenario):
 
         self.veh_path_df = self._find_vehicle_paths()
         self._calc_trajectory_probability()
+        self._locate_overlapping_paths()
+        self._calc_entropy()
+        self.entropy = self._sum_entropy_fast()
+        self.traj_entropy_breakdown_df = self._breakdown_trajectory_entropy()
+
+        self._driveable_area()
+
+        self._display_all_paths()
+
         return
+    
+    
+    def _driveable_area(self):
+        return 
+
+    
+    def _breakdown_trajectory_entropy(self):
+        # print(self.dut_traj_df)
+        """
+        Breakdown trajectory entropy into a neat table
+        """
+        data = {
+            "ID" : self.dut_traj_df["ID"],
+            self.A : self.dut_traj_df["entropy"]
+        }
+        # Initilize other actors as 0
+        foe_df = self.veh_path_df[self.veh_path_df["actor"] != self.A]
+        for actor in foe_df["actor"]:
+            data[actor] = 0.
+        
+        df = pd.DataFrame(data)
+
+        # Update dataframe for other actors
+        for i in range(len(foe_df.index)):
+            s = foe_df.iloc[i]
+            df[s["actor"]] = df["ID"].isin(s["crosses_traj_ids"]) \
+                * s["entropy"]
+            continue
+
+        print(df)
+        return
+
+    def _sum_entropy_fast(self) -> float:
+        """
+        Find the entropy of A
+        """
+        entropy_foe = self.veh_path_df[
+            (self.veh_path_df["actor"] != self.A)
+        ]["entropy_all"].sum()
+        
+        entropy_a = self.dut_traj_df["entropy"].sum()
+
+        entropy = entropy_a + entropy_foe
+        return entropy
+
+    def _calc_entropy(self):
+        # print(self.veh_path_df)
+        """
+        Find the entropy of simulated paths.
+        """
+        self.veh_path_df["entropy"] = self.veh_path_df["traj_probability"]\
+            .apply(utils.entropy)
+        self.veh_path_df["entropy_all"] = \
+            self.veh_path_df["crosses_traj_ids"].apply(len) \
+            * self.veh_path_df["entropy"]
+        # print(self.veh_path_df)
+        
+        """
+        Find the entropy for A trajectories
+        """
+        self.dut_traj_df["entropy"] = self.dut_traj_df["traj_probability"]\
+            .apply(utils.entropy)
+        # print(self.dut_traj_df)
+        return
+    
+    def _locate_overlapping_paths(self):
+        overlapping_trajectory_ids = []
+        for path_polygon in self.veh_path_df["polygon"]:
+            flags = self.dut_traj_df["polygon"].apply(
+                lambda traj_polygon : traj_polygon.intersects(path_polygon) 
+            )
+            tid = self.dut_traj_df[flags]["ID"].tolist()
+            overlapping_trajectory_ids.append(tid)
+        self.veh_path_df["crosses_traj_ids"] = overlapping_trajectory_ids
+        return
+
 
     def _calc_trajectory_probability(self):
         df = self.veh_path_df
@@ -519,13 +604,13 @@ class DriveableAreaScenario(sxp.Scenario):
         else:
             traj_probability = np.array([1/14 for _ in range(len(traj_ids))])
         
-        traj_ids = (traj_ids + 5) / 10
+        tids = (traj_ids + 5) / 10
         delta_samples = [
             sxp.project(
                 - constants.dut.max_steering_angle, 
                 constants.dut.max_steering_angle, 
                 tid
-            ) for tid in traj_ids
+            ) for tid in tids
         ]        
 
         
@@ -582,7 +667,7 @@ class DriveableAreaScenario(sxp.Scenario):
         df["polygon"] = [polygon.intersection(edge_polygon) \
          for polygon in df["polygon"]]
         df["traj_probability"] = traj_probability
-
+        df["ID"] = traj_ids
         return df
     
     def _add_polygons_to_sumo(self, 

@@ -73,6 +73,13 @@ def gaussian_pdf(x, mu :float = 0, sigma : float = 1):
     pdf_value = 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(-0.5 * ((x - mu) / sigma)**2)
     return pdf_value
 
+def entropy(px : float) -> float:
+    """
+    PDF of value x.
+    returns entropy for one case.
+    """
+    return -px * np.log2(px)
+
 def _test():
     return
 

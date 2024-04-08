@@ -28,7 +28,7 @@ class kinematics_model:
     time_window = 3.    # seconds
     dt = 0.1            # seconds
     road_curvature = 0. # degrees
-    distribution = distribution.uniform
+    distribution = distribution.gaussian
 
 
 

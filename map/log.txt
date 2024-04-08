@@ -1,21 +1,19 @@
 Integration method was set to 'ballistic', since a default action step length was specified.
-Loading net-file from '/home/gossq/git-projects/Vehicle-Kinematics-Model/map/3-roads.net.xml' ... done (3ms).
+Loading net-file from '/home/gossq/git-projects/Vehicle-Kinematics-Model/map/3-roads.net.xml' ... done (1ms).
 Loading done.
-Simulation version 1.19.0 started with time: 0.00.
-Error: Requested command not implemented (0xac): GUI is not running, command not implemented in command line sumo
-Simulation ended at time: 3.30
+Simulation started with time: 0.00.
+Loading state from '/home/gossq/git-projects/Vehicle-Kinematics-Model/map/init-state.xml' ... done (29ms).
+Simulation ended at time: 0.30
 Reason: TraCI requested termination.
 Performance: 
- Duration: 0.40s
- TraCI-Duration: 0.40s
- Real time factor: 8.22943
- UPS: 167.082294
+ Duration: 122.24s
+ TraCI-Duration: 0.45s
+ Real time factor: 0.00245423
+ UPS: 0.548111
 Vehicles: 
  Inserted: 3
- Running: 2
+ Running: 3
  Waiting: 0
- Teleports: 1 (Collisions: 1)
- Emergency Braking: 1
 
 DijkstraRouter answered 3 queries and explored 5.00 edges on average.
 DijkstraRouter spent 0.00s answering queries (0.00ms on average).
