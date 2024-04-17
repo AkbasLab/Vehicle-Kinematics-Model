@@ -1,2 +1,0 @@
-Warning: Teleporting vehicle 'C'; collision with vehicle 'B', lane='double_0', gap=-4.79', latGap=-0.03, time=0.90 stage=laneChange.
-Warning: Vehicle 'C' teleports beyond arrival edge 'double', time=0.90.

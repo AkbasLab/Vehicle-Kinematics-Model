@@ -169,12 +169,15 @@ class DriveableAreaScenario(sxp.Scenario):
             rid : str = "triple"
         ):
         super().__init__(params)
-        
 
         # Update Lane change time
         cmd : list[str] = utils.load(__LOAD_CMD_FN__)[1:]
-        i = cmd.index("--lanechange.duration")
-        cmd[i+1] = str(params["lane_change_dur"])
+        try:
+            params["lane_change_dur"]
+            i = cmd.index("--lanechange.duration")
+            cmd[i+1] = str(params["lane_change_dur"])
+        except KeyError:
+            pass
 
         # Reload simulation
         traci.load(cmd)
@@ -210,9 +213,14 @@ class DriveableAreaScenario(sxp.Scenario):
             self.route = ["warmup", "pedE"]
             self.start_eid = "pedW"
             self.dist_a = 260.5 - params["dist.PA"]
-        
+
+        self._score = self._init_score()
+
         self._add_vehicles()
         self._init_view()
+
+        self.decel = traci.vehicle.getDecel(self.A)
+        self.emergency_decel = traci.vehicle.getEmergencyDecel(self.A)
         
         self.dut_traj_df = self._predict_dut_trajectory_polygons()
         self._add_polygons_to_sumo(self.dut_traj_df, constants.RGBA.light_blue)
@@ -223,27 +231,142 @@ class DriveableAreaScenario(sxp.Scenario):
         self._calc_trajectory_probability()
         self._locate_overlapping_paths()
         self._calc_entropy()
-        self.entropy = self._sum_entropy_fast()
+        self.entropy = self._sum_entropy_fast()        
         self.traj_entropy_breakdown_df = self._breakdown_trajectory_entropy()
 
-        self._score = pd.Series({"entropy" : self.entropy})
-
         self._display_all_paths()
+
+        self._score["entropy.A"] = self.entropy
+        if self.c_enabled:
+            self._score["pdf(traj.C)"] = self.veh_path_df[
+                self.veh_path_df["actor"] == self.C
+            ]["traj_probability"].iloc[0]
+
+        print(self.score)
         return
     
+
+    def _update_score(self):
+        """
+        Braking force of vehicle A
+        """
+        accel = traci.vehicle.getAcceleration(self.A)
+        if accel < 0:
+            decel = -accel
+            decel_normal = np.round(
+                min(decel / self.decel, 2.0),
+                decimals = 5
+            )
+            self._score["max(decel.normal.A)"] = max(
+                self._score["max(decel.normal.A)"],
+                decel_normal
+            )
+
+            decel_mps = np.round(
+                min(decel, self.emergency_decel),
+                decimals = 5
+            )
+            self._score["max(decel.mps.A)"] = max(
+                self._score["max(decel.mps.A)"],
+                decel_mps
+            )
+
+        """
+        Collision
+        """
+        colliding_vehs = traci.simulation.getCollidingVehiclesIDList()
+        if self.A in colliding_vehs:
+            self._score["collision.A"] = 1
+        
+
+        """
+        Distance to Collision
+        Time to Collision
+        """
+        pos_a = traci.vehicle.getPosition(self.A)
+        speed = traci.vehicle.getSpeed(self.A)
+        speed = max(0.001,speed) # Speed should be non-zero for ttc calculation
+        if self.b_enabled:
+            if self.B in colliding_vehs:
+                self._score["min(dtc.m.AB)"] = 0
+                self._score["min(ttc.s.AB)"] = 0
+            else:
+                pos_b = traci.vehicle.getPosition(self.B)
+
+                dtc = utils.distance_to(*pos_a, *pos_b)
+                self._score["min(dtc.m.AB)"] = min(
+                    self._score["min(dtc.m.AB)"],
+                    dtc
+                )
+
+                ttc = dtc/speed
+                self._score["min(ttc.s.AB)"] = min(
+                    self._score["min(ttc.s.AB)"],
+                    ttc
+                )
+
+
+        if self.c_enabled:
+            if self.C in colliding_vehs:
+                self._score["min(dtc.m.AC)"] = 0
+                self._score["min(ttc.s.AC)"] = 0
+            else:
+                pos_c = traci.vehicle.getPosition(self.C)
+
+                dtc = utils.distance_to(*pos_a, *pos_c)
+                self._score["min(dtc.m.AC)"] = min(
+                    self._score["min(dtc.m.AC)"],
+                    dtc
+                )
+
+                ttc = dtc/speed
+                self._score["min(ttc.s.AC)"] = min(
+                    self._score["min(ttc.s.AC)"],
+                    ttc
+                )
+
+        if self.p_enabled:
+            pos_p = traci.person.getPosition(self.P)
+
+            dtc = utils.distance_to(*pos_a, *pos_p)
+            self._score["min(dtc.m.AP)"] = min(
+                self._score["min(dtc.m.AP)"],
+                dtc
+            )
+
+            ttc = dtc/speed
+            self._score["min(ttc.s.AP)"] = min(
+                self._score["min(ttc.s.AP)"],
+                ttc
+            )
+        return
+    
+    def _init_score(self) -> pd.Series:
+        data = {
+            "entropy.A" : -1,
+            "max(decel.normal.A)" : 0,
+            "max(decel.mps.A)" : 0,
+            "collision.A" : 0,
+        }
+
+        if self.b_enabled:
+            data["min(ttc.s.AB)"] = 9999
+            data["min(dtc.m.AB)"] = 9999
+        if self.c_enabled:
+            data["min(ttc.s.AC)"] = 9999
+            data["min(dtc.m.AC)"] = 9999
+            data["pdf(traj.C)"] = 9999
+        if self.p_enabled:
+            data["min(ttc.s.AP)"] = 9999
+            data["min(dtc.m.AP)"] = 9999
+
+        return pd.Series(data).sort_index()
     
     def _driveable_area(self):
         """
         Non DUT paths
         """
         foe_paths = self.veh_path_df[self.veh_path_df["actor"] != self.A]
-        
-        """
-        Car shapes
-        """
-        print(foe_paths)
-        # for actor in foe_paths["actor"]:
-        #     self.length = traci.vehicle.getLen
 
         """
         Split the driveable Area
@@ -438,13 +561,6 @@ class DriveableAreaScenario(sxp.Scenario):
         for pid in traci.person.getIDList():
             actor_widths.append(traci.person.getWidth(pid))
 
-        # Actor Lengths
-        # actor_lengths = []
-        # for vid in traci.vehicle.getIDList():
-        #     actor_lengths.append(traci.vehicle.getLength(vid)) 
-        # for pid in traci.person.getIDList():
-        #     actor_lengths.append(traci.person.getLength(pid))
-
         # Actor Angle
         veh_angles = {}
         for vid in traci.vehicle.getIDList():
@@ -459,6 +575,8 @@ class DriveableAreaScenario(sxp.Scenario):
         end_time = warmup_time + constants.kinematics_model.time_window
         while traci.simulation.getMinExpectedNumber() > 0:
 
+            self._update_score()
+
             # Add positions and angles
             for vid in traci.vehicle.getIDList():
                 veh_paths[vid].append(traci.vehicle.getPosition(vid))
@@ -466,10 +584,18 @@ class DriveableAreaScenario(sxp.Scenario):
             for pid in traci.person.getIDList():
                 veh_paths[pid].append(traci.person.getPosition(pid))
                 veh_angles[pid].append(traci.person.getAngle(pid))
+            
+            # End early on a collision.
+            if traci.simulation.getCollidingVehiclesNumber():
+                break
 
             traci.simulationStep()
+
+            # Time window complete
             if traci.simulation.getTime() >= end_time:
                 break
+
+            continue
         
         # Make at least 2 coordinate pairs
         for key,val  in veh_paths.items():
@@ -495,23 +621,6 @@ class DriveableAreaScenario(sxp.Scenario):
                         for angle in veh_path_df["angle.deg"]]
         veh_path_df["delta_angle.deg"] = delta_angles
 
-
-        # Expand the linestring back to cover the length of the cars.
-        # corrected_linestrings = []
-        # for i in range(len(veh_path_df.index)):
-        #     s = veh_path_df.iloc[i]
-        #     origin = s["linestring"].coords[0]
-        #     p0 = utils.project_point(
-        #         *origin, 
-        #         -(s["length"]*.9), 
-        #         utils.deg2rad(s["angle.deg"][0]-90)
-        #     )
-        #     linestring = [p0]
-        #     [linestring.append(p) for p in s["linestring"].coords]
-        #     linestring = shapely.geometry.LineString(linestring)    
-        #     corrected_linestrings.append(linestring)
-        #     continue
-        # veh_path_df["linestring"] = corrected_linestrings
         
         
         # Create Polygons
@@ -760,6 +869,12 @@ class DriveableAreaScenario(sxp.Scenario):
         for i in range(len(df.index)):
             s = df.iloc[i]
             shape : shapely.geometry.Polygon = s["polygon"]
+            try:
+                shape.boundary.coords
+            except NotImplementedError:
+                continue
+            except ValueError:
+                continue
             traci.polygon.add(
                 polygonID = "%s%d" % (prefix, self.polygon_counter),
                 shape = list(shape.boundary.coords),

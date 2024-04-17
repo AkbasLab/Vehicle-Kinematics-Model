@@ -90,7 +90,7 @@ class DriveableAreaEstimator:
         self._x0 = float(x0)
         self._y0 = float(y0)
         self._phi0 = utils.deg2rad(float(phi0))
-
+        
         self._predict_trajectories()
         self._create_concise_trajectories()
         self._boundary, self._shape_df = \

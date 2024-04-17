@@ -19,11 +19,11 @@ class strategy:
 Running configuration Options
 """
 class config:
-    scenario = scenario.cut_in
+    scenario = scenario.pedestrian_crossing
     tsc = lambda s : False
     seed = 444
     strategy = strategy.monte_carlo
-    n_tests = 50
+    n_tests = 1
 
 """
 DUT SETTINGS
@@ -82,7 +82,7 @@ class sumo:
     start = True
     quit_on_end = True
     show_trajectories = True
-    show_path_history = True
+    show_path_history = False
     seed = 333
     default_action_step_length = 0.1
     step_length = 0.1
