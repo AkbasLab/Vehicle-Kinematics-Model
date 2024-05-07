@@ -3,6 +3,7 @@ import warnings
 if shutil.which("sumo") is None:
     warnings.warn("Cannot find sumo/tools in the system path. Please verify that the lastest SUMO is installed from https://www.eclipse.org/sumo/")
 import os
+import time
 
 import traci
 import traci.constants as tc
@@ -237,20 +238,35 @@ class DriveableAreaScenario(sxp.Scenario):
         self._display_all_paths()
 
         self._score["entropy.A"] = self.entropy
-        if self.c_enabled:
+        
+        if constants.config.scenario == constants.scenario.cut_in:
             self._score["pdf(traj.C)"] = self.veh_path_df[
                 self.veh_path_df["actor"] == self.C
             ]["traj_probability"].iloc[0]
 
-        print(self.score)
+        # print(self.score)
         return
     
 
     def _update_score(self):
         """
+        Collision
+        """
+        colliding_vehs = traci.simulation.getCollidingVehiclesIDList()
+        if self.A in colliding_vehs:
+            self._score["collision.A"] = 1
+            accel = 0
+            speed = 0
+            pos_a = (-9999,-9999)
+        else:
+            accel = traci.vehicle.getAcceleration(self.A)
+            pos_a = traci.vehicle.getPosition(self.A)
+            speed = traci.vehicle.getSpeed(self.A)
+        speed = max(0.001,speed) # Speed should be non-zero for ttc calculation
+
+        """
         Braking force of vehicle A
         """
-        accel = traci.vehicle.getAcceleration(self.A)
         if accel < 0:
             decel = -accel
             decel_normal = np.round(
@@ -271,21 +287,13 @@ class DriveableAreaScenario(sxp.Scenario):
                 decel_mps
             )
 
-        """
-        Collision
-        """
-        colliding_vehs = traci.simulation.getCollidingVehiclesIDList()
-        if self.A in colliding_vehs:
-            self._score["collision.A"] = 1
+       
         
 
         """
         Distance to Collision
         Time to Collision
         """
-        pos_a = traci.vehicle.getPosition(self.A)
-        speed = traci.vehicle.getSpeed(self.A)
-        speed = max(0.001,speed) # Speed should be non-zero for ttc calculation
         if self.b_enabled:
             if self.B in colliding_vehs:
                 self._score["min(dtc.m.AB)"] = 0
@@ -355,7 +363,8 @@ class DriveableAreaScenario(sxp.Scenario):
         if self.c_enabled:
             data["min(ttc.s.AC)"] = 9999
             data["min(dtc.m.AC)"] = 9999
-            data["pdf(traj.C)"] = 9999
+            if constants.config.scenario == constants.scenario.cut_in:
+                data["pdf(traj.C)"] = 9999
         if self.p_enabled:
             data["min(ttc.s.AP)"] = 9999
             data["min(dtc.m.AP)"] = 9999
@@ -413,8 +422,12 @@ class DriveableAreaScenario(sxp.Scenario):
             color = color_map[df.iloc[0]["actor"]]
             self._add_polygons_to_sumo( df, color, layer = 7)
             continue    
-
-        input("pause")
+        
+        if constants.sumo.show_path_time < 0:
+            input("pause")
+        else:
+            time.sleep(constants.sumo.show_path_time)
+        
         return
 
 
@@ -782,7 +795,7 @@ class DriveableAreaScenario(sxp.Scenario):
         """
         Convert Maja's ids to steering angles
         """
-        traj_ids = np.array([5,4,3,2,1.5,1,.5,0,-.5,-1.5,-2,-3,-4,-5])
+        traj_ids = np.array([5,4,3,2,1.5,1,.5,0,-.5,-1.,-1.5,-2,-3,-4,-5])
 
         if constants.kinematics_model.distribution == constants.distribution.gaussian:
             traj_probability = utils.gaussian_pdf(traj_ids, mu = 0, sigma = 1)

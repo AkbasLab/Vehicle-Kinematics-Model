@@ -8,11 +8,18 @@ import constants
 import traci
 import pandas as pd
 import numpy as np
+import time
+import os
 from typing import Callable
 
 
 class DriveableAreaTest:
     def __init__(self):
+        """
+        Timing
+        """
+        start_time = time.time()
+
         """
         Load Data
         """
@@ -31,6 +38,14 @@ class DriveableAreaTest:
         fn = "scenarios/%s.csv" % constants.config.scenario
         self._manager = sxp.ScenarioManager(pd.read_csv(fn))
         self._scenario = scenario_map[constants.config.scenario]
+
+
+        # Container for parameter and score history
+        self._ls_param_history = []
+        self._ls_score_history = []
+
+
+        preprocessing_completed_time = time.time()
         
         """
         Choose Strategy
@@ -41,6 +56,36 @@ class DriveableAreaTest:
             raise NotImplementedError("Strategy %s not supported." % constants.config.strategy)
 
         traci.close()
+
+        scenario_simulation_completed_time = time.time()
+
+        """
+        Postprocessing
+        """
+        param_history = pd.concat(self._ls_param_history)
+        score_history = pd.concat(self._ls_score_history)
+        
+        out_dir = "out/tests/%s" % constants.config.scenario
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        
+        param_history.to_csv("%s/param_hist.csv" % out_dir, index=False)
+        score_history.to_csv("%s/score_hist.csv" % out_dir, index=False)
+
+        """
+        Statistics
+        """
+        end_time = time.time()
+        preprocessing_time = preprocessing_completed_time - start_time
+        scenario_simulation_time = scenario_simulation_completed_time \
+            - preprocessing_completed_time
+        total_time = end_time - start_time
+        
+        print("      Runtime: %.3fs" % total_time)
+        print("Preprocessing: %.3fs" % preprocessing_time)
+        print("Sim Execution: %.3fs" % scenario_simulation_time)
+        print(" Avg Sim Time: %.3fs" % 
+              (scenario_simulation_time / constants.config.n_tests))
         return
 
     @property
@@ -69,8 +114,15 @@ class DriveableAreaTest:
             fast_foward = False
         )
         for i in range(constants.config.n_tests):
-            print("Test %d/%d" % (i+1, constants.config.n_tests), end="\r")
+            print("Test %d/%d %.2f%%" % (
+                i+1, 
+                constants.config.n_tests, 
+                (i+1)/constants.config.n_tests * 100
+            ), end="\r")
             exp.step()
+
+        self._ls_param_history.append(exp.params_history)
+        self._ls_score_history.append(exp.score_history)
         print("\nComplete!")
         return
 

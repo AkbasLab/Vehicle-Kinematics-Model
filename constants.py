@@ -23,7 +23,7 @@ class config:
     tsc = lambda s : False
     seed = 444
     strategy = strategy.monte_carlo
-    n_tests = 1
+    n_tests = 10_000
 
 """
 DUT SETTINGS
@@ -83,6 +83,7 @@ class sumo:
     quit_on_end = True
     show_trajectories = True
     show_path_history = False
+    show_path_time = 1 # in seconds
     seed = 333
     default_action_step_length = 0.1
     step_length = 0.1
@@ -94,4 +95,39 @@ class presentation_layers:
     above_road = 3
     above_crosswalk = 5
     
+"""
+Feature and Score names 
+"""
+features = {
+    scenario.cut_in : [
+        "s0.A", "s0.B", "s0.C", "dist.BA", "dist.CA", "lane_change_dur"
+    ],
+    scenario.no_traffic : ["s0.A"],
+    scenario.two_lane_traffic : ["s0.A", "s0.B", "s0.C", "dist.BA", "dist.CA"],
+    scenario.three_lane_traffic : ["s0.A", "s0.B", "s0.C", "dist.BA", "dist.CA"],
+    scenario.pedestrian_crossing : ["s0.A", "dist.PA", "dist.P0"]
+}
+
+scores = {
+    scenario.cut_in : [
+        "collision.A", "entropy.A", "max(decel.mps.A)", "max(decel.normal.A)", 
+        "min(dtc.m.AB)", "min(dtc.m.AC)", "min(ttc.s.AB)", "min(ttc.s.AC)", 
+        "pdf(traj.C)"
+    ],
+    scenario.no_traffic : [
+        "collision.A","entropy.A", "max(decel.mps.A)", "max(decel.normal.A)"
+    ],
+    scenario.two_lane_traffic : [
+        "collision.A", "entropy.A", "max(decel.mps.A)", "max(decel.normal.A)", 
+        "min(dtc.m.AB)", "min(dtc.m.AC)", "min(ttc.s.AB)", "min(ttc.s.AC)" 
+    ],
+    scenario.three_lane_traffic : [
+        "collision.A", "entropy.A", "max(decel.mps.A)", "max(decel.normal.A)", 
+        "min(dtc.m.AB)", "min(dtc.m.AC)", "min(ttc.s.AB)", "min(ttc.s.AC)"
+    ],
+    scenario.pedestrian_crossing : [
+        "collision.A", "entropy.A", "max(decel.mps.A)", "max(decel.normal.A)", 
+        "min(dtc.m.AP)", "min(ttc.s.AP)"
+    ]
+}
     

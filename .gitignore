@@ -1,0 +1,5 @@
+# Ignore big datasets
+results/
+backup/
+result-summary.md
+result-summary.pdf

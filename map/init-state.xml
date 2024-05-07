@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2024-04-17 17:17:49 by Eclipse SUMO sumo Version 1.19.0
+<!-- generated on 2024-04-23 16:14:30 by Eclipse SUMO sumo Version 1.19.0
 <configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
 
     <input>
@@ -48,7 +48,7 @@
     <vType id="DEFAULT_PEDTYPE@P" maxSpeed="10.44" vClass="pedestrian"/>
     <vType id="DEFAULT_VEHTYPE"/>
     <vType id="DEFAULT_VEHTYPE@A" maxSpeed="15.00" accel="2.60"/>
-    <vehicle id="A" type="DEFAULT_VEHTYPE@A" depart="0.00" departLane="1" color="12,158,236" route="!A!var#1" distance="0 1" speedFactor="1.0564" reroute="1" state="262149 0 2 5.10 0 0.17 200 0 0" pos="232.50 227.50 0.22" speed="2.16 2.16" angle="90.00" posLat="0.00" waitingTime="100000 0" lcState="0.00 1.00 0">
+    <vehicle id="A" type="DEFAULT_VEHTYPE@A" depart="0.00" departLane="1" color="12,158,236" route="!A!var#1" distance="0 1" speedFactor="1.0564" reroute="1" state="262149 0 2 5.10 0 0.03 200 0 0" pos="240.50 235.50 1.24" speed="12.42 12.42" angle="90.00" posLat="0.00" waitingTime="100000 0" lcState="0.00 1.00 0">
         <device id="routing_A" state="0"/>
     </vehicle>
     <lane id="pedW_1">

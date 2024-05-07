@@ -4,7 +4,3 @@ s0.B,0,15,0.27
 s0.C,0,15,0.27
 dist.BA,0.,30,1.
 dist.CA,0,30,1.
-dist.PA,0,30,1.
-dist.p0,-5,5,1,
-lane_change_dur,0.5,5,.1
-

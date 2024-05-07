@@ -1,0 +1,6 @@
+scenario,# tests,collision,normal,near collision,collision %,normal %,near collision %
+cut-in,10000,3548,4139,2313,35.480000000000004,41.39,23.13
+2-lane-traffic,10000,669,7147,2184,6.69,71.47,21.84
+no-traffic,10000,0,10000,0,0.0,100.0,0.0
+3-lane-traffic,10000,0,10000,0,0.0,100.0,0.0
+pedestrian,10000,0,8005,1995,0.0,80.05,19.950000000000003
